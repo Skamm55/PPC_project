@@ -20,15 +20,15 @@ class PreyState:
     energy: float = 0.0
     active: bool = False
     alive: bool = True
-    reproduction_cooldown: int = 40 # ticks avant de pouvoir se reproduire à nouveau
+    reproduction_cooldown: int = 15 # 1er cooldown avant de pouvoir se reproduire pour la 1ère fois
 
 # Variables activité/reproduction
 H = 5.0  
 R = 9.0
-ENERGY_LOST_TICK = 0.2   # énergie perdue par tick
+ENERGY_LOST_TICK = 0.5   # énergie perdue par tick
 EAT_AMOUNT = 3.0      # herbe consommée
-EAT_GAIN = 8.0          # énergie gagnée
-REPRO_COOLDOWN = 40    # ticks de cooldown après reproduction
+EAT_GAIN = 7.0          # énergie gagnée
+REPRO_COOLDOWN = 30    # ticks de cooldown après reproduction
 
 class WorldManager(BaseManager):
     pass
@@ -83,9 +83,6 @@ def prey_tick(st: PreyState, world, huntable, reproducible_preys, world_lock) ->
 
     # 2) chassable si énergie < H
     if st.energy < H:
-        if st.active == False:
-            st.active = True
-            print(f"[prey:{pid}] is now active", flush=True)
         world_lock.acquire()
         try:
             if pid not in huntable:
@@ -93,7 +90,7 @@ def prey_tick(st: PreyState, world, huntable, reproducible_preys, world_lock) ->
                 print(f"[prey:{pid}] is now huntable | huntable list: {list(huntable)}", flush=True)
         finally:
             world_lock.release()
-    else:
+    if st.energy > H:
         world_lock.acquire()
         try:
             if pid in huntable:
@@ -104,6 +101,7 @@ def prey_tick(st: PreyState, world, huntable, reproducible_preys, world_lock) ->
 
     # 3) manger si faim
     if st.energy < H:
+        time.sleep(1.5)  # Simuler le temps pour manger (permettre au prédateur d'attraper la proie)
         world_lock.acquire()
         try:
             if world["grass_unity"] >= EAT_AMOUNT:
@@ -124,7 +122,7 @@ def prey_tick(st: PreyState, world, huntable, reproducible_preys, world_lock) ->
                 reproducible_preys.append(pid)
                 print(f"[prey:{pid}] added to reproducible preys list", flush=True)
                 print(f"[prey:{pid}] reproducible preys list: {list(reproducible_preys)}", flush=True)
-                st.reproduction_cooldown = REPRO_COOLDOWN  # set or reset cooldown
+                st.reproduction_cooldown = REPRO_COOLDOWN  # reset cooldown
         finally:
             world_lock.release()
     elif st.energy < R:

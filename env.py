@@ -220,18 +220,30 @@ def simulation_tick():
                 # Si l'herbe dépasse la quantité cible, on réajuste pour ne pas dépasser
                 if world["grass_unity"] > world["grass_plant"]:
                     world["grass_unity"] = world["grass_plant"]
-            
-            if len(reproducible_preys) >= 2:
-                print(f"[env] Reproduction des proies possible, individus reproductibles : {len(reproducible_preys)}", flush=True)
-                # Création d'une nouvelle proie
-                try:
-                    subprocess.Popen([sys.executable, "prey.py"])
-                    print(f"[env] Une nouvelle proie est née ! Population totale : {world['preys']}", flush=True)
-                    reproducible_preys.clear()  # Réinitialiser la liste après reproduction
-                except Exception as e:
-                    print(f"[env] Erreur lors de la création d'une nouvelle proie : {e}", flush=True)
     finally:
         world_lock.release()
+
+    # Reproduction des proies
+    if len(reproducible_preys) >= 2:
+        print(f"[env] Reproduction des proies possible, individus reproductibles : {len(reproducible_preys)}", flush=True)
+        # Création d'une nouvelle proie
+        try:
+            subprocess.Popen(["cmd.exe", "/c", "start", "wsl", "--cd", "/home/maksim_npl/PPC_project", sys.executable, "prey.py"], cwd="/mnt/c")
+            print(f"[env] Une nouvelle proie est née !", flush=True)
+            reproducible_preys.clear()  # Réinitialiser la liste après reproduction
+        except Exception as e:
+            print(f"[env] Erreur lors de la création d'une nouvelle proie : {e}", flush=True)
+    
+    # Reproduction des prédateurs
+    if len(reproducible_predators) >= 2:
+        print(f"[env] Reproduction des prédateurs possible, individus reproductibles : {len(reproducible_predators)}", flush=True)
+        # Création d'un nouveau prédateur
+        try:
+            subprocess.Popen(["cmd.exe", "/c", "start", "wsl", "--cd", "/home/maksim_npl/PPC_project", sys.executable, "predator.py"], cwd="/mnt/c")
+            print(f"[env] Un nouveau prédateur est né !", flush=True)
+            reproducible_predators.clear()  # Réinitialiser la liste après reproduction
+        except Exception as e:
+            print(f"[env] Erreur lors de la création d'un nouveau prédateur : {e}", flush=True)
 
 # Main :
 def main():
