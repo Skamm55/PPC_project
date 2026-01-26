@@ -69,7 +69,7 @@ def connect_shared_memory(pid: int):
             memoire_partagee.get_lock())
     print(f"[predator:{pid}] huntable type={type(huntable)} repr={repr(huntable)}", flush=True)
 
-def predator_tick(st: PredatorState, world, huntable, reproducible_predators, world_lock) -> None:
+def predator_tick(st: PredatorState, world, huntable, reproducible_preys, reproducible_predators, world_lock) -> None:
     pid = os.getpid()
 
     # 1) métabolisme
@@ -148,7 +148,7 @@ def main():
 
     # Connexion à la mémoire partagée via Manager
     try:
-        world, huntable, reproducible_preys, reproducible_predators, world_lock = connect_shared_memory(pid)
+        world, huntable, reproducible_preys, reproducible_preys, reproducible_predators, world_lock = connect_shared_memory(pid)
     except Exception as e:
         print(f"[predator:{pid}] cannot connect to shared memory: {e}", file=sys.stderr, flush=True)
         sys.exit(1)
