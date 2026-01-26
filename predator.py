@@ -20,14 +20,14 @@ class PredatorState:
     energy: float = 0.0
     active: bool = False
     alive: bool = True
-    reproduction_cooldown: int = 30 # 1er cooldown avant de pouvoir se reproduire pour la 1ère fois
+    reproduction_cooldown: int = 15 # 1er cooldown avant de pouvoir se reproduire pour la 1ère fois
 
 # Variables activité/reproduction
-H = 7.0  
-R = 10.0
-ENERGY_LOST_TICK = 0.6    # énergie perdue par tick
+H = 5.0  
+R = 9.0
+ENERGY_LOST_TICK = 0.4    # énergie perdue par tick
 EAT_GAIN = 6.0          # énergie gagnée
-REPRO_COOLDOWN = 50    # ticks de cooldown après reproduction
+REPRO_COOLDOWN = 30    # ticks de cooldown après reproduction
 
 class WorldManager(BaseManager):
     pass
@@ -87,8 +87,7 @@ def predator_tick(st: PredatorState, world, huntable, reproducible_preys, reprod
             if len(huntable) > 0:
                 prey_pid = random.choice(huntable)
                 huntable.remove(prey_pid)
-                world_lock.acquire()
-                world["prey"] = world.get("prey") - 1
+                world["preys"] = world.get("preys") - 1
                 os.kill(prey_pid, signal.SIGTERM)  # Tuer la proie
                 st.energy += EAT_GAIN
                 print(f"[predator:{pid}] hunted prey {prey_pid}, energy increased to {round(st.energy,1)}", flush=True)
@@ -100,8 +99,8 @@ def predator_tick(st: PredatorState, world, huntable, reproducible_preys, reprod
         print(f"[predator:{pid}] can reproduce", flush=True)
         world_lock.acquire()
         try:
-            if pid not in reproducible_preys:
-                reproducible_preys.append(pid)
+            if pid not in reproducible_predators:
+                reproducible_predators.append(pid)
                 print(f"[predator:{pid}] added to reproducible predators list", flush=True)
                 print(f"[predator:{pid}] reproducible predators list: {list(reproducible_predators)}", flush=True)
                 st.reproduction_cooldown = REPRO_COOLDOWN  # reset cooldown
@@ -148,7 +147,7 @@ def main():
 
     # Connexion à la mémoire partagée via Manager
     try:
-        world, huntable, reproducible_preys, reproducible_preys, reproducible_predators, world_lock = connect_shared_memory(pid)
+        world, huntable, reproducible_preys, reproducible_predators, world_lock = connect_shared_memory(pid)
     except Exception as e:
         print(f"[predator:{pid}] cannot connect to shared memory: {e}", file=sys.stderr, flush=True)
         sys.exit(1)
@@ -166,7 +165,7 @@ def main():
     try:
         while st.alive:
             time.sleep(1.0)
-            predator_tick(st, world, huntable, reproducible_predators, world_lock)
+            predator_tick(st, world, huntable, reproducible_preys, reproducible_predators, world_lock)
 
     except KeyboardInterrupt:
         print(f"[predator:{pid}] interrupted by user", flush=True)

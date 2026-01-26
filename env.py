@@ -30,7 +30,7 @@ MSG_STATE = 7
 world = {
     "preys": 0,
     "predators": 0,
-    "grass_plant": 20,
+    "grass_plant": 40,
     "grass_unity": 0.0,
     "drought": 0,
     "drought_duration": 0,
