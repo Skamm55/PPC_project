@@ -7,8 +7,9 @@ import sysv_ipc
 import signal
 import os
 import threading
+import subprocess
 
-# Configuration basique
+# Configuration
 HOST = "127.0.0.1"
 PORT_SOCKET = 5001
 PORT_MANAGER = 5002
@@ -39,6 +40,8 @@ world = {
 }
 
 huntable = []  # PIDs des proies chassables (energy < H)
+reproducible_preys = []  # PIDs des proies reproductibles (energy > R)
+reproducible_predators = []  # PIDs des prédateurs reproductibles (energy > R)
 world_lock = mp.Lock()
 
 def get_world():
@@ -46,6 +49,12 @@ def get_world():
 
 def get_huntable():
     return huntable
+
+def get_reproducible_preys():
+    return reproducible_preys
+
+def get_reproducible_predators():
+    return reproducible_predators
 
 def get_lock():
     return world_lock
@@ -55,7 +64,10 @@ class WorldManager(BaseManager):
 
 WorldManager.register("get_world", callable=get_world, proxytype=DictProxy)
 WorldManager.register("get_huntable", callable=get_huntable, proxytype=ListProxy)
+WorldManager.register("get_reproducible_preys", callable=get_reproducible_preys, proxytype=ListProxy)
+WorldManager.register("get_reproducible_predators", callable=get_reproducible_predators, proxytype=ListProxy)
 WorldManager.register("get_lock", callable=get_lock, proxytype=AcquirerProxy)
+
 
 # Variables locales statiques
 DROUGHT_DURATION = 15
@@ -192,7 +204,6 @@ def simulation_tick():
         if world["drought"] == 1:  # Si la sécheresse est activée
             if world["drought_duration"] > 0:
                 world["drought_duration"] -= 1  # Décrémente la durée restante
-                print(f"[env] Sécheresse active, {world['drought_duration']} secondes restantes", flush=True)
             else:
                 world["drought"] = 0
                 print("[env] Sécheresse terminée", flush=True)
@@ -209,6 +220,16 @@ def simulation_tick():
                 # Si l'herbe dépasse la quantité cible, on réajuste pour ne pas dépasser
                 if world["grass_unity"] > world["grass_plant"]:
                     world["grass_unity"] = world["grass_plant"]
+            
+            if len(reproducible_preys) >= 2:
+                print(f"[env] Reproduction des proies possible, individus reproductibles : {len(reproducible_preys)}", flush=True)
+                # Création d'une nouvelle proie
+                try:
+                    subprocess.Popen([sys.executable, "prey.py"])
+                    print(f"[env] Une nouvelle proie est née ! Population totale : {world['preys']}", flush=True)
+                    reproducible_preys.clear()  # Réinitialiser la liste après reproduction
+                except Exception as e:
+                    print(f"[env] Erreur lors de la création d'une nouvelle proie : {e}", flush=True)
     finally:
         world_lock.release()
 

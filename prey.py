@@ -20,20 +20,23 @@ class PreyState:
     energy: float = 0.0
     active: bool = False
     alive: bool = True
+    reproduction_cooldown: int = 40 # ticks avant de pouvoir se reproduire à nouveau
 
 # Variables activité/reproduction
 H = 5.0  
-R = 15.0
-ENERGY_LOST_TICK = 0.3    # énergie perdue par tick
+R = 9.0
+ENERGY_LOST_TICK = 0.2   # énergie perdue par tick
 EAT_AMOUNT = 3.0      # herbe consommée
-EAT_GAIN = 2.0          # énergie gagnée
-REPRO_COST = 10.0        # énergie perdue quand reproduction
+EAT_GAIN = 8.0          # énergie gagnée
+REPRO_COOLDOWN = 40    # ticks de cooldown après reproduction
 
 class WorldManager(BaseManager):
     pass
 
 WorldManager.register("get_world")
 WorldManager.register("get_huntable")
+WorldManager.register("get_reproducible_preys")
+WorldManager.register("get_reproducible_predators")
 WorldManager.register("get_lock")
 
 # Socket join
@@ -62,16 +65,21 @@ def connect_shared_memory(pid: int):
     print(f"[PREY:{pid}] connected to shared memory : {HOST}:{PORT_MANAGER}",flush=True)
     return (memoire_partagee.get_world(),
             memoire_partagee.get_huntable(),
+            memoire_partagee.get_reproducible_preys(),
+            memoire_partagee.get_reproducible_predators(),
             memoire_partagee.get_lock())
     print(f"[prey:{pid}] huntable type={type(huntable)} repr={repr(huntable)}", flush=True)
 
-def prey_tick(st: PreyState, world, huntable, world_lock) -> None:
+def prey_tick(st: PreyState, world, huntable, reproducible_preys, world_lock) -> None:
     pid = os.getpid()
 
     # 1) métabolisme
     st.energy -= ENERGY_LOST_TICK
     energy_rounded = round(st.energy, 1)
     print(f"[prey:{pid}] energy : {energy_rounded}", flush=True)
+    # cooldown reproduction
+    if st.reproduction_cooldown > 0:
+        st.reproduction_cooldown -= 1
 
     # 2) chassable si énergie < H
     if st.energy < H:
@@ -81,18 +89,16 @@ def prey_tick(st: PreyState, world, huntable, world_lock) -> None:
         world_lock.acquire()
         try:
             if pid not in huntable:
-                print(f"[prey:{pid}] is now huntable", flush=True)
                 huntable.append(pid)
-                print(f"[prey:{pid}] huntable list: {list(huntable)}", flush=True)
+                print(f"[prey:{pid}] is now huntable | huntable list: {list(huntable)}", flush=True)
         finally:
             world_lock.release()
     else:
         world_lock.acquire()
         try:
             if pid in huntable:
-                print(f"[prey:{pid}] is no longer huntable", flush=True)
                 huntable.remove(pid)
-                print(f"[prey:{pid}] huntable list: {list(huntable)}", flush=True)
+                print(f"[prey:{pid}] is no longer huntable | huntable list: {list(huntable)}", flush=True)
         finally:
             world_lock.release()
 
@@ -102,21 +108,31 @@ def prey_tick(st: PreyState, world, huntable, world_lock) -> None:
         try:
             if world["grass_unity"] >= EAT_AMOUNT:
                 world["grass_unity"] -= EAT_AMOUNT
-                print(f"[prey:{pid}] eats {EAT_AMOUNT} units of grass, new grass unity: {world['grass_unity']}", flush=True)
+                rounded_grass = round(world["grass_unity"], 1)
                 st.energy += EAT_GAIN
                 energy_rounded = round(st.energy, 1)
-                print(f"[prey:{pid}] gains {EAT_GAIN} energy from eating, new energy: {energy_rounded}", flush=True)
+                print(f"[prey:{pid}] eats {EAT_AMOUNT} units of grass | new grass unity: {rounded_grass} | gains {EAT_GAIN} energy from eating | new energy: {energy_rounded}", flush=True)
         finally:
             world_lock.release()
 
     # 4) reproduction si énergie haute
-    if st.energy >= R:
+    if st.energy >= R and st.reproduction_cooldown == 0:
         print(f"[prey:{pid}] can reproduce", flush=True)
         world_lock.acquire()
         try:
-            if world["preys"] >= 2: # au moins 2 individus pour reproduire
-                st.energy -= REPRO_COST
-                # population +1 dans mémoire partagée --> a faire
+            if pid not in reproducible_preys:
+                reproducible_preys.append(pid)
+                print(f"[prey:{pid}] added to reproducible preys list", flush=True)
+                print(f"[prey:{pid}] reproducible preys list: {list(reproducible_preys)}", flush=True)
+                st.reproduction_cooldown = REPRO_COOLDOWN  # set or reset cooldown
+        finally:
+            world_lock.release()
+    elif st.energy < R:
+        world_lock.acquire()
+        try:
+            if pid in reproducible_preys:
+                reproducible_preys.remove(pid)
+                print(f"[prey:{pid}] removed from reproducible preys list", flush=True)
         finally:
             world_lock.release()
 
@@ -156,7 +172,7 @@ def main():
 
     # Connexion à la mémoire partagée via Manager
     try:
-        world, huntable, world_lock = connect_shared_memory(pid)
+        world, huntable, reproducible_preys, reproducible_predators, world_lock = connect_shared_memory(pid)
     except Exception as e:
         print(f"[prey:{pid}] cannot connect to shared memory: {e}", file=sys.stderr, flush=True)
         sys.exit(1)
@@ -168,13 +184,13 @@ def main():
     finally:
         world_lock.release()
     
-    st.energy = random.uniform(8.0, 14.0) #Initial energy
+    st.energy = random.uniform(6.0, 9.0) #Initial energy
 
     #Boucle principale
     try:
         while st.alive:
             time.sleep(1.0)
-            prey_tick(st, world, huntable, world_lock)
+            prey_tick(st, world, huntable, reproducible_preys, world_lock)
 
     except KeyboardInterrupt:
         print(f"[prey:{pid}] interrupted by user", flush=True)
