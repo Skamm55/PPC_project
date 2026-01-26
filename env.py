@@ -8,7 +8,7 @@ import signal
 import os
 import threading
 
-# Configuration
+# Configuration basique
 HOST = "127.0.0.1"
 PORT_SOCKET = 5001
 PORT_MANAGER = 5002
