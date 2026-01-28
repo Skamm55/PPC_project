@@ -8,6 +8,7 @@ from typing import Optional
 from multiprocessing.managers import BaseManager
 from multiprocessing import Lock
 import random
+import errno
 
 # Configuration
 HOST = "127.0.0.1"
@@ -44,11 +45,11 @@ def join_simulation(role: str = "PREY") -> socket.socket:
     pid = os.getpid()
     msg = f"JOIN {role} {pid}\n".encode()
 
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.connect((HOST, PORT_SOCKET))
-        s.sendall(msg)
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((HOST, PORT_SOCKET))
+    s.sendall(msg)
 
-        resp = s.recv(64).decode(errors="replace").strip()
+    resp = s.recv(64).decode(errors="replace").strip()
 
     print(f"[prey:{pid}] joined env on {HOST}:{PORT_SOCKET}", flush=True)
 
@@ -143,7 +144,7 @@ def main():
     pid = os.getpid()
     reason = ""
 
-    #Join via la socket
+    # Join via la socket
     try:
         s = join_simulation("PREY")
     except Exception as e:
@@ -163,46 +164,78 @@ def main():
         world["preys"] = world.get("preys") + 1
     finally:
         world_lock.release()
-    
-    st.energy = random.uniform(8.0, 9.0) #Initial energy
 
-    #Boucle principale
+    st.energy = random.uniform(8.0, 9.0)  # Initial energy
+
+    # Boucle principale
     try:
         while st.alive:
-            time.sleep(1.0)
-            prey_tick(st, world, huntable, reproducible_preys, world_lock)
-            s.settimeout(0.0)
-            data = s.recv(1024)
-            if data:
-                if data.decode(errors="replace").strip().startswith("STOP"):
+            # écouter STOP sans bloquer
+            try:
+                s.settimeout(0.0)
+                data = s.recv(1024)  # peut lever Errno 11
+                if data and data.decode(errors="replace").strip().startswith("STOP"):
                     reason = "ENV_SHUTDOWN"
                     break
-            s.settimeout(None)
-        
-        if st.alive!=False:
-            reason="natural death (energy<=0)"
+
+            except OSError as e:
+                # Errno 11 = normal en non-bloquant => on ignore
+                if e.errno != errno.EAGAIN:
+                    pass
+
+            finally:
+                s.settimeout(None)
+
+            # tick de vie de la proie
+            time.sleep(1.0)
+            prey_tick(st, world, huntable, reproducible_preys, world_lock)
+
+        # si on sort car mort "naturelle"
+        if reason == "" and (st.alive == False):
+            reason = "natural death (energy<=0)"
 
     except KeyboardInterrupt:
-        reason="interrupted by user (ctrl+c)"
-        
+        reason = "interrupted by user (ctrl+c)"
+
     except Exception as e:
+        reason = f"error: {e}"
         print(f"[prey:{pid}] error: {e}", file=sys.stderr, flush=True)
-    
+
     finally:
+        if reason == "":
+            reason = "UNKNOWN"
+
         print(f"[prey:{pid}] dying because : {reason}", flush=True)
-        s.sendall(f"DIED PREY {pid} {reason}\n".encode())
-        world_lock.acquire()
+
+        # prévenir env (ne jamais planter dans le cleanup)
         try:
-            if pid in huntable:
-                huntable.remove(pid)
-            if pid in reproducible_preys:
-                reproducible_preys.remove(pid)
-            world["preys"] = world.get("preys") - 1
-        finally:
-            world_lock.release()
-        s.close()
-        os.kill(pid, signal.SIGTERM)
+            s.sendall(f"PREY {pid} DIED because : {reason}\n".encode())
+        except Exception:
+            pass
+
+        # cleanup world (protégé)
+        try:
+            if reason != "ENV_SHUTDOWN":
+                world_lock.acquire()
+                try:
+                    if pid in huntable:
+                        huntable.remove(pid)
+                    if pid in reproducible_preys:
+                        reproducible_preys.remove(pid)
+                    world["preys"] = world.get("preys") - 1
+                finally:
+                    world_lock.release()
+        except Exception:
+            pass
+
+        try:
+            s.close()
+        except Exception:
+            pass
+
+        sys.exit(0)
 
 
 if __name__ == "__main__":
     main()
+

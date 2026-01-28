@@ -175,7 +175,7 @@ def socket_accept_one(server_socket: socket.socket):
         print(f"[env] SOCKET_JOIN | from={addr[0]}:{addr[1]} | {line}", flush=True)
 
         CLIENTS.append(conn)  # garder la connexion ouverte
-        
+
     except Exception as e:
         print("[env] join handling error:", e, flush=True)
         conn.close()
@@ -186,7 +186,10 @@ def socket_read_all():
 
     for conn in CLIENTS:
         conn.settimeout(0.0)        # lecture non bloquante
-        data = conn.recv(1024)
+        try:
+            data = conn.recv(1024)
+        except OSError:
+            continue
         if not data:               # client déconnecté
             dead_conns.append(conn)
             continue
@@ -206,6 +209,7 @@ def stop_everyone():
             conn.sendall(b"STOP\n")
         except Exception:
             pass
+    time.sleep(1) # sinon socket se ferme avant que prey/predator reçoivent STOP
 
 
 # Appel de la sécheresse périodique

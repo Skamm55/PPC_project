@@ -8,6 +8,7 @@ from typing import Optional
 from multiprocessing.managers import BaseManager
 from multiprocessing import Lock
 import random
+import errno
 
 # Configuration
 HOST = "127.0.0.1"
@@ -39,17 +40,17 @@ WorldManager.register("get_reproducible_predators")
 WorldManager.register("get_lock")
 
 # Socket join
-def join_simulation(role: str = "PREDATOR") -> socket.socket:
+def join_simulation(role: str = "PREY") -> socket.socket:
     pid = os.getpid()
     msg = f"JOIN {role} {pid}\n".encode()
 
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.connect((HOST, PORT_SOCKET))
-        s.sendall(msg)
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((HOST, PORT_SOCKET))
+    s.sendall(msg)
 
-        resp = s.recv(64).decode(errors="replace").strip()
+    resp = s.recv(64).decode(errors="replace").strip()
 
-    print(f"[predator:{pid}] joined env on {HOST}:{PORT_SOCKET}", flush=True)
+    print(f"[prey:{pid}] joined env on {HOST}:{PORT_SOCKET}", flush=True)
 
     if resp != "OK":
         s.close()
@@ -117,30 +118,17 @@ def predator_tick(st: PredatorState, world, huntable, reproducible_preys, reprod
 
     # 5) mort naturelle
     if st.energy <= 0:
-        predator_dead(st, world, huntable, world_lock, reason=1, pid=pid)
-
-# Gestion de la mort du prédateur
-def predator_dead(st: PredatorState, world, huntable, world_lock, reason, pid: int) -> None:
-    st.alive = False
-    if reason == 1:
-        print(f"[predator:{pid}] died because of energy<=0", flush=True)
-    elif reason == 2:
-        print(f"[predator:{pid}] env is quitting, connexion closed", flush=True)
-    world_lock.acquire()
-    try:
-        world["predators"] = world.get("predators") - 1
-    finally:
-        world_lock.release()
-    os.kill(pid, signal.SIGTERM)
+        st.alive = False  
     
 
 def main():
     st = PredatorState()
     pid = os.getpid()
+    reason = ""
 
     #Join via la socket
     try:
-        join_simulation("PREDATOR")
+        s = join_simulation("PREDATOR")
     except Exception as e:
         print(f"[predator] cannot join env: {e}", file=sys.stderr, flush=True)
         sys.exit(1)
@@ -164,14 +152,68 @@ def main():
     #Boucle principale
     try:
         while st.alive:
+            # écouter STOP sans bloquer
+            try:
+                s.settimeout(0.0)
+                data = s.recv(1024)  # peut lever Errno 11
+                if data and data.decode(errors="replace").strip().startswith("STOP"):
+                    reason = "ENV_SHUTDOWN"
+                    break
+
+            except OSError as e:
+                # Errno 11 = normal en non-bloquant => on ignore
+                if e.errno != errno.EAGAIN:
+                    pass
+
+            finally:
+                s.settimeout(None)
+
+            # tick de vie du prédateur
             time.sleep(1.0)
             predator_tick(st, world, huntable, reproducible_preys, reproducible_predators, world_lock)
+        
+        # si on sort car mort "naturelle"
+        if reason == "" and (st.alive == False):
+            reason = "natural death (energy<=0)"
 
     except KeyboardInterrupt:
-        print(f"[predator:{pid}] interrupted by user", flush=True)
+        reason = "interrupted by user (ctrl+c)"
         
     except Exception as e:
+        reason = f"error: {e}"
         print(f"[predator:{pid}] error: {e}", file=sys.stderr, flush=True)
+    
+    finally:
+        if reason == "":
+            reason = "UNKNOWN"
+
+        print(f"[predator:{pid}] dying because : {reason}", flush=True)
+
+        # prévenir env (ne jamais planter dans le cleanup)
+        try:
+            s.sendall(f"PREDATOR {pid} DIED because : {reason}\n".encode())
+        except Exception:
+            pass
+
+        # cleanup world (protégé)
+        try:
+            if reason != "ENV_SHUTDOWN":
+                world_lock.acquire()
+                try:
+                    if pid in reproducible_predators:
+                        reproducible_predators.remove(pid)
+                    world["predators"] = world.get("predators") - 1
+                finally:
+                    world_lock.release()
+        except Exception:
+            pass
+
+        try:
+            s.close()
+        except Exception:
+            pass
+
+        sys.exit(0)
 
 
 if __name__ == "__main__":
