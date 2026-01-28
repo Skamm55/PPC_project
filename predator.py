@@ -28,7 +28,7 @@ H = 5.0
 R = 9.0
 ENERGY_LOST_TICK = 0.4    # énergie perdue par tick
 EAT_GAIN = 8.0          # énergie gagnée
-REPRO_COOLDOWN = 30    # ticks de cooldown après reproduction
+REPRO_COOLDOWN = 20    # ticks de cooldown après reproduction
 
 class WorldManager(BaseManager):
     pass
@@ -40,7 +40,7 @@ WorldManager.register("get_reproducible_predators")
 WorldManager.register("get_lock")
 
 # Socket join
-def join_simulation(role: str = "PREY") -> socket.socket:
+def join_simulation(role: str = "PREDATOR") -> socket.socket:
     pid = os.getpid()
     msg = f"JOIN {role} {pid}\n".encode()
 
@@ -50,11 +50,11 @@ def join_simulation(role: str = "PREY") -> socket.socket:
 
     resp = s.recv(64).decode(errors="replace").strip()
 
-    print(f"[prey:{pid}] joined env on {HOST}:{PORT_SOCKET}", flush=True)
+    print(f"[predator:{pid}] rejoint env sur {HOST}:{PORT_SOCKET}", flush=True)
 
     if resp != "OK":
         s.close()
-        raise Exception("Join request rejected by env")
+        raise Exception("Join request rejeté par env")
     
     return s
 
@@ -62,13 +62,12 @@ def join_simulation(role: str = "PREY") -> socket.socket:
 def connect_shared_memory(pid: int):
     memoire_partagee = WorldManager(address=(HOST, PORT_MANAGER), authkey=AUTHKEY)
     memoire_partagee.connect()
-    print(f"[PREDATOR:{pid}] connected to shared memory : {HOST}:{PORT_MANAGER}",flush=True)
+    print(f"[predateur:{pid}] connectée à la shared memory : {HOST}:{PORT_MANAGER}",flush=True)
     return (memoire_partagee.get_world(),
             memoire_partagee.get_huntable(),
             memoire_partagee.get_reproducible_preys(),
             memoire_partagee.get_reproducible_predators(),
             memoire_partagee.get_lock())
-    print(f"[predator:{pid}] huntable type={type(huntable)} repr={repr(huntable)}", flush=True)
 
 def predator_tick(st: PredatorState, world, huntable, reproducible_preys, reproducible_predators, world_lock) -> None:
     pid = os.getpid()
@@ -76,7 +75,7 @@ def predator_tick(st: PredatorState, world, huntable, reproducible_preys, reprod
     # 1) métabolisme
     st.energy -= ENERGY_LOST_TICK
     energy_rounded = round(st.energy, 1)
-    print(f"[predator:{pid}] energy : {energy_rounded}", flush=True)
+    print(f"[predateur:{pid}] energie : {energy_rounded}", flush=True)
     # cooldown reproduction
     if st.reproduction_cooldown > 0:
         st.reproduction_cooldown -= 1
@@ -89,21 +88,21 @@ def predator_tick(st: PredatorState, world, huntable, reproducible_preys, reprod
                 prey_pid = random.choice(huntable)
                 huntable.remove(prey_pid)
                 world["preys"] = world.get("preys") - 1
-                os.kill(prey_pid, signal.SIGTERM)  # Tuer la proie
+                os.kill(prey_pid, signal.SIGUSR1)  # Tuer la proie
                 st.energy += EAT_GAIN
-                print(f"[predator:{pid}] hunted prey {prey_pid}, energy increased to {round(st.energy,1)}", flush=True)
+                print(f"[predateur:{pid}] a mangé proie {prey_pid}, son énergie augmente à {round(st.energy,1)}", flush=True)
         finally:
             world_lock.release()
 
     # 3) reproduction si énergie haute
     if st.energy >= R and st.reproduction_cooldown == 0:
-        print(f"[predator:{pid}] can reproduce", flush=True)
+        print(f"[predateur:{pid}] peut se reproduire", flush=True)
         world_lock.acquire()
         try:
             if pid not in reproducible_predators:
                 reproducible_predators.append(pid)
-                print(f"[predator:{pid}] added to reproducible predators list", flush=True)
-                print(f"[predator:{pid}] reproducible predators list: {list(reproducible_predators)}", flush=True)
+                print(f"[predateur:{pid}] ajoutée à la reproducible predator list", flush=True)
+                print(f"[predateur:{pid}] reproducible predator list: {list(reproducible_predators)}", flush=True)
                 st.reproduction_cooldown = REPRO_COOLDOWN  # reset cooldown
         finally:
             world_lock.release()
@@ -112,14 +111,13 @@ def predator_tick(st: PredatorState, world, huntable, reproducible_preys, reprod
         try:
             if pid in reproducible_predators:
                 reproducible_predators.remove(pid)
-                print(f"[predator:{pid}] removed from reproducible predators list", flush=True)
+                print(f"[predateur:{pid}] retiré de la reproducible preys list", flush=True)
         finally:
             world_lock.release()
 
     # 5) mort naturelle
     if st.energy <= 0:
-        st.alive = False  
-    
+        st.alive = False      
 
 def main():
     st = PredatorState()
@@ -130,14 +128,14 @@ def main():
     try:
         s = join_simulation("PREDATOR")
     except Exception as e:
-        print(f"[predator] cannot join env: {e}", file=sys.stderr, flush=True)
+        print(f"[predateur] ne peut pas rejoindre env: {e}", file=sys.stderr, flush=True)
         sys.exit(1)
 
     # Connexion à la mémoire partagée via Manager
     try:
         world, huntable, reproducible_preys, reproducible_predators, world_lock = connect_shared_memory(pid)
     except Exception as e:
-        print(f"[predator:{pid}] cannot connect to shared memory: {e}", file=sys.stderr, flush=True)
+        print(f"[predateur:{pid}] ne peut pas se connecter à la shared memory: {e}", file=sys.stderr, flush=True)
         sys.exit(1)
 
     # Inscription dans le monde
@@ -147,7 +145,7 @@ def main():
     finally:
         world_lock.release()
     
-    st.energy = random.uniform(8.0, 14.0) #Initial energy
+    st.energy = random.uniform(10.0, 13.0) #énergie initiale
 
     #Boucle principale
     try:
@@ -157,7 +155,7 @@ def main():
                 s.settimeout(0.0)
                 data = s.recv(1024)  # peut lever Errno 11
                 if data and data.decode(errors="replace").strip().startswith("STOP"):
-                    reason = "ENV_SHUTDOWN"
+                    reason = "Arrêt de la simulation par env"
                     break
 
             except OSError as e:
@@ -174,30 +172,30 @@ def main():
         
         # si on sort car mort "naturelle"
         if reason == "" and (st.alive == False):
-            reason = "natural death (energy<=0)"
+            reason = "mort naturelle (énergie inférieure à 0)"
 
     except KeyboardInterrupt:
-        reason = "interrupted by user (ctrl+c)"
+        reason = "Interrompu par l'utilisateur (ctrl+c)"
         
     except Exception as e:
         reason = f"error: {e}"
-        print(f"[predator:{pid}] error: {e}", file=sys.stderr, flush=True)
+        print(f"[predateur:{pid}] error: {e}", file=sys.stderr, flush=True)
     
     finally:
         if reason == "":
-            reason = "UNKNOWN"
+            reason = "INCONNUE"
 
-        print(f"[predator:{pid}] dying because : {reason}", flush=True)
+        print(f"[predateur:{pid}] est mort, raison : {reason}", flush=True)
 
         # prévenir env (ne jamais planter dans le cleanup)
         try:
-            s.sendall(f"PREDATOR {pid} DIED because : {reason}\n".encode())
+            s.sendall(f"PREDATEUR {pid} MORT, raison : {reason}\n".encode())
         except Exception:
             pass
 
         # cleanup world (protégé)
         try:
-            if reason != "ENV_SHUTDOWN":
+            if reason != "Interrompu par l'utilisateur (ctrl+c)":
                 world_lock.acquire()
                 try:
                     if pid in reproducible_predators:

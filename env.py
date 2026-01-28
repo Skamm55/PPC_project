@@ -77,17 +77,13 @@ DROUGHT_PERIOD = 30
 
 # Fonctions message queue
 def mq_poll_commands(mq: sysv_ipc.MessageQueue):
-    """
-    Lit (sans bloquer) toutes les commandes en attente venant du display.
-    Utilise mq.receive(block=False). Si vide -> BusyError.
-    """
     while True:
         try:
             msg, t = mq.receive(block=False)
         except sysv_ipc.BusyError:
             return  # plus de messages
         except Exception as e:
-            print("[env] MQ receive error:", e, flush=True)
+            print("[env] Erreur dans la MQ:", e, flush=True)
             return
 
         text = msg.decode(errors="replace").strip()
@@ -161,7 +157,7 @@ def socket_accept_one(server_socket: socket.socket):
     except socket.timeout:
         return
     except Exception as e:
-        print("[env] accept error:", e, flush=True)
+        print("[env] socket accept error:", e, flush=True)
         return
 
     try:
@@ -177,7 +173,7 @@ def socket_accept_one(server_socket: socket.socket):
         CLIENTS.append(conn)  # garder la connexion ouverte
 
     except Exception as e:
-        print("[env] join handling error:", e, flush=True)
+        print("[env] join socket error:", e, flush=True)
         conn.close()
 
 # Lecture non bloquante de toutes les connexions clients
@@ -335,10 +331,10 @@ def main():
 
             time.sleep(1)
     except KeyboardInterrupt:
-        print("[env] Interrupted by user", flush=True)
+        print("[env] Interrompu par l'utilisateur (ctrl+c)", flush=True)
 
     finally:
-        print("[env] shutting down...", flush=True)
+        print("[env] Fermeture de l'environnement...", flush=True)
         try:
             if drought_timer is not None:
                 drought_timer.cancel()
@@ -357,7 +353,7 @@ def main():
         except Exception:
             pass
 
-        print("[env] Env stopped and cleaned up.", flush=True)
+        print("[env] Env arrêté et nettoyé", flush=True)
 
 if __name__ == "__main__":
     main()

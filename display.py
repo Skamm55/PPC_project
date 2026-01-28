@@ -13,16 +13,16 @@ COMMANDE_GRASS = 5
 # Type de message d'env vers display
 MSG_STATE =7
 
+# Envoie une commande à env via la MQ 
 def send_command(mq, cmd_type, param=None):
-    """ Envoie une commande à env via la MQ """
     if param:
         message = f"{param}".encode()
     else:
         message = "".encode()
     mq.send(message, type=cmd_type)
 
+# lire et afficher l'état dans la fenêtre graphique
 def update_display(mq, state_label):
-    """ Fonction pour lire et afficher l'état de la simulation dans la fenêtre graphique """
     while True:
         try:
             # Lire l'état envoyé par env via MQ
