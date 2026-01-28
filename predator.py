@@ -26,7 +26,7 @@ class PredatorState:
 H = 5.0  
 R = 9.0
 ENERGY_LOST_TICK = 0.4    # énergie perdue par tick
-EAT_GAIN = 6.0          # énergie gagnée
+EAT_GAIN = 8.0          # énergie gagnée
 REPRO_COOLDOWN = 30    # ticks de cooldown après reproduction
 
 class WorldManager(BaseManager):
@@ -39,12 +39,9 @@ WorldManager.register("get_reproducible_predators")
 WorldManager.register("get_lock")
 
 # Socket join
-def join_simulation(role: str = "PREDATOR") -> None:
-    """
-    Se connecte à env via TCP et envoie 'JOIN PREDATOR <pid>'.
-    """
+def join_simulation(role: str = "PREDATOR") -> socket.socket:
     pid = os.getpid()
-    msg = f"{role} (PID : {pid}) : JOINED\n".encode()
+    msg = f"JOIN {role} {pid}\n".encode()
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.connect((HOST, PORT_SOCKET))
@@ -55,7 +52,10 @@ def join_simulation(role: str = "PREDATOR") -> None:
     print(f"[predator:{pid}] joined env on {HOST}:{PORT_SOCKET}", flush=True)
 
     if resp != "OK":
+        s.close()
         raise Exception("Join request rejected by env")
+    
+    return s
 
 # Memory shared connection
 def connect_shared_memory(pid: int):

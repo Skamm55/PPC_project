@@ -28,7 +28,7 @@ R = 9.0
 ENERGY_LOST_TICK = 0.5   # énergie perdue par tick
 EAT_AMOUNT = 3.0      # herbe consommée
 EAT_GAIN = 7.0          # énergie gagnée
-REPRO_COOLDOWN = 30    # ticks de cooldown après reproduction
+REPRO_COOLDOWN = 25    # ticks de cooldown après reproduction
 
 class WorldManager(BaseManager):
     pass
@@ -40,12 +40,9 @@ WorldManager.register("get_reproducible_predators")
 WorldManager.register("get_lock")
 
 # Socket join
-def join_simulation(role: str = "PREY") -> None:
-    """
-    Se connecte à env via TCP et envoie 'JOIN PREY <pid>'.
-    """
+def join_simulation(role: str = "PREY") -> socket.socket:
     pid = os.getpid()
-    msg = f"{role} (PID : {pid}) : JOINED\n".encode()
+    msg = f"JOIN {role} {pid}\n".encode()
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.connect((HOST, PORT_SOCKET))
@@ -56,7 +53,10 @@ def join_simulation(role: str = "PREY") -> None:
     print(f"[prey:{pid}] joined env on {HOST}:{PORT_SOCKET}", flush=True)
 
     if resp != "OK":
+        s.close()
         raise Exception("Join request rejected by env")
+    
+    return s
 
 # Memory shared connection
 def connect_shared_memory(pid: int):
@@ -136,34 +136,16 @@ def prey_tick(st: PreyState, world, huntable, reproducible_preys, world_lock) ->
 
     # 5) mort naturelle
     if st.energy <= 0:
-        prey_dead(st, world, huntable, world_lock, reason=1, pid=pid)
-
-# Gestion de la mort de la proie
-def prey_dead(st: PreyState, world, huntable, world_lock, reason, pid: int) -> None:
-    st.alive = False
-    if reason == 1:
-        print(f"[prey:{pid}] died because of energy<=0", flush=True)
-    elif reason == 2:
-        print(f"[prey:{pid}] died because of a predator", flush=True)
-    elif reason == 3:
-        print(f"[prey:{pid}] env is quitting, connexion closed", flush=True)
-    world_lock.acquire()
-    try:
-        if pid in huntable:
-            huntable.remove(pid)
-        world["preys"] = world.get("preys") - 1
-    finally:
-        world_lock.release()
-    os.kill(pid, signal.SIGTERM)
-    
+        st.alive = False  
 
 def main():
     st = PreyState()
     pid = os.getpid()
+    reason = ""
 
     #Join via la socket
     try:
-        join_simulation("PREY")
+        s = join_simulation("PREY")
     except Exception as e:
         print(f"[prey] cannot join env: {e}", file=sys.stderr, flush=True)
         sys.exit(1)
@@ -182,19 +164,44 @@ def main():
     finally:
         world_lock.release()
     
-    st.energy = random.uniform(6.0, 9.0) #Initial energy
+    st.energy = random.uniform(8.0, 9.0) #Initial energy
 
     #Boucle principale
     try:
         while st.alive:
             time.sleep(1.0)
             prey_tick(st, world, huntable, reproducible_preys, world_lock)
+            s.settimeout(0.0)
+            data = s.recv(1024)
+            if data:
+                if data.decode(errors="replace").strip().startswith("STOP"):
+                    reason = "ENV_SHUTDOWN"
+                    break
+            s.settimeout(None)
+        
+        if st.alive!=False:
+            reason="natural death (energy<=0)"
 
     except KeyboardInterrupt:
-        print(f"[prey:{pid}] interrupted by user", flush=True)
+        reason="interrupted by user (ctrl+c)"
         
     except Exception as e:
         print(f"[prey:{pid}] error: {e}", file=sys.stderr, flush=True)
+    
+    finally:
+        print(f"[prey:{pid}] dying because : {reason}", flush=True)
+        s.sendall(f"DIED PREY {pid} {reason}\n".encode())
+        world_lock.acquire()
+        try:
+            if pid in huntable:
+                huntable.remove(pid)
+            if pid in reproducible_preys:
+                reproducible_preys.remove(pid)
+            world["preys"] = world.get("preys") - 1
+        finally:
+            world_lock.release()
+        s.close()
+        os.kill(pid, signal.SIGTERM)
 
 
 if __name__ == "__main__":

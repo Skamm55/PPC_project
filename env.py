@@ -16,6 +16,9 @@ PORT_MANAGER = 5002
 MQ_KEY = 1234  # Clé pour MessageQueue
 AUTHKEY = b"memoirepartagee"
 
+# Liste des sockets clients (prédateurs/proies) (evite que la socket se close a la fin de la fonction)
+CLIENTS = []
+
 # Types de commandes display vers env
 COMMANDE_PAUSE = 1
 COMMANDE_START = 2
@@ -26,7 +29,6 @@ COMMANDE_GRASS = 5
 MSG_STATE = 7
 
 #Remote Manager shared data (env <-> prey/pred)
-
 world = {
     "preys": 0,
     "predators": 0,
@@ -162,19 +164,49 @@ def socket_accept_one(server_socket: socket.socket):
         print("[env] accept error:", e, flush=True)
         return
 
-    with conn:
+    try:
+        data = conn.recv(1024)
+        if not data:
+            return
+
+        line = data.decode(errors="replace").strip()
+        conn.sendall(b"OK")
+
+        print(f"[env] SOCKET_JOIN | from={addr[0]}:{addr[1]} | {line}", flush=True)
+
+        CLIENTS.append(conn)  # garder la connexion ouverte
+        
+    except Exception as e:
+        print("[env] join handling error:", e, flush=True)
+        conn.close()
+
+# Lecture non bloquante de toutes les connexions clients
+def socket_read_all():
+    dead_conns = []
+
+    for conn in CLIENTS:
+        conn.settimeout(0.0)        # lecture non bloquante
+        data = conn.recv(1024)
+        if not data:               # client déconnecté
+            dead_conns.append(conn)
+            continue
+        msg = data.decode().strip()
+        if msg:
+            print(f"[env] {msg}")
+        conn.settimeout(None)
+
+    for conn in dead_conns:
+        CLIENTS.remove(conn)
+        conn.close()
+
+# Close toutes les sockets clients proprement
+def stop_everyone():
+    for conn in CLIENTS:
         try:
-            data = conn.recv(1024)
-            if not data:
-                return
+            conn.sendall(b"STOP\n")
+        except Exception:
+            pass
 
-            line = data.decode(errors="replace").strip()
-            conn.sendall(b"OK")
-
-            print(f"[env] SOCKET_JOIN | from={addr[0]}:{addr[1]} | {line}", flush=True)
-
-        except Exception as e:
-            print("[env] join handling error:", e, flush=True)
 
 # Appel de la sécheresse périodique
 def drought_call():
@@ -287,6 +319,7 @@ def main():
                 world_lock.release()
 
             socket_accept_one(server_socket)
+            socket_read_all()
 
             if not paused:
                 simulation_tick()
@@ -308,6 +341,10 @@ def main():
         except Exception:
             pass
         try:
+            stop_everyone()
+            for c in CLIENTS:
+                try: c.close()
+                except: pass
             server_socket.close()
         except Exception:
             pass
