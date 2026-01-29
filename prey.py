@@ -145,7 +145,7 @@ def main():
 
     # Mort car mangé par predateur
     def est_mange(sig, frame):
-        raise SystemExit("MANGÉ par un predateur")
+        raise SystemExit("MANGÉE par un predateur")
 
     signal.signal(signal.SIGUSR1, est_mange)
 
@@ -217,13 +217,13 @@ def main():
 
         # prévenir env (ne jamais planter dans le cleanup)
         try:
-            s.sendall(f"PREY {pid} MORT, raison : {reason}\n".encode())
+            s.sendall(f"PROIE {pid} est MORTE, raison : {reason}\n".encode())
         except Exception:
             pass
 
         # cleanup world (protégé)
         try:
-            if reason != "Arrêt de la simulation par env" and reason != "MANGÉ par un predateur":
+            if reason != "Arrêt de la simulation par env" and reason != "MANGÉE par un predateur":
                 world_lock.acquire()
                 try:
                     if pid in huntable:

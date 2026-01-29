@@ -101,8 +101,8 @@ def predator_tick(st: PredatorState, world, huntable, reproducible_preys, reprod
         try:
             if pid not in reproducible_predators:
                 reproducible_predators.append(pid)
-                print(f"[predateur:{pid}] ajoutée à la reproducible predator list", flush=True)
-                print(f"[predateur:{pid}] reproducible predator list: {list(reproducible_predators)}", flush=True)
+                print(f"[predateur:{pid}] ajoutée à la reproducible predators list", flush=True)
+                print(f"[predateur:{pid}] reproducible predators list: {list(reproducible_predators)}", flush=True)
                 st.reproduction_cooldown = REPRO_COOLDOWN  # reset cooldown
         finally:
             world_lock.release()
@@ -111,7 +111,7 @@ def predator_tick(st: PredatorState, world, huntable, reproducible_preys, reprod
         try:
             if pid in reproducible_predators:
                 reproducible_predators.remove(pid)
-                print(f"[predateur:{pid}] retiré de la reproducible preys list", flush=True)
+                print(f"[predateur:{pid}] retiré de la reproducible predator list", flush=True)
         finally:
             world_lock.release()
 
@@ -189,7 +189,7 @@ def main():
 
         # prévenir env (ne jamais planter dans le cleanup)
         try:
-            s.sendall(f"PREDATEUR {pid} MORT, raison : {reason}\n".encode())
+            s.sendall(f"PREDATEUR {pid} est MORT, raison : {reason}\n".encode())
         except Exception:
             pass
 
