@@ -25,7 +25,7 @@ class PreyState:
 
 # Variables activité/reproduction
 H = 5.0  
-R = 9.0
+R = 8.0
 ENERGY_LOST_TICK = 0.5   # énergie perdue par tick
 EAT_AMOUNT = 3.0      # herbe consommée
 EAT_GAIN = 7.0          # énergie gagnée
@@ -76,7 +76,7 @@ def prey_tick(st: PreyState, world, huntable, reproducible_preys, world_lock) ->
     # 1) métabolisme
     st.energy -= ENERGY_LOST_TICK
     energy_rounded = round(st.energy, 1)
-    print(f"[proie:{pid}] energie : {energy_rounded}", flush=True)
+    print(f"[proie:{pid}] énergie : {energy_rounded}", flush=True)
     # cooldown reproduction
     if st.reproduction_cooldown > 0:
         st.reproduction_cooldown -= 1

@@ -75,7 +75,7 @@ def predator_tick(st: PredatorState, world, huntable, reproducible_preys, reprod
     # 1) métabolisme
     st.energy -= ENERGY_LOST_TICK
     energy_rounded = round(st.energy, 1)
-    print(f"[predateur:{pid}] energie : {energy_rounded}", flush=True)
+    print(f"[predateur:{pid}] énergie : {energy_rounded}", flush=True)
     # cooldown reproduction
     if st.reproduction_cooldown > 0:
         st.reproduction_cooldown -= 1
