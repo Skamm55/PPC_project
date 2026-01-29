@@ -84,18 +84,17 @@ Cependant il est aussi possible d'arrêter manuellement les processus (ctrl+c), 
 
 ### 5️⃣ Lecture des données
 
-Evolution de la population, quantité d'herbe, sécheresse, état du système (pause ou non) --> fenêtre graphique de `display.py`
+**Evolution de la population, quantité d'herbe, sécheresse, état du système (pause ou non)** --> fenêtre graphique de `display.py`
 
-Connexion des individus à l'environnement, naissance par reproduction, mort --> terminal de `env.py`
+**Connexion des individus à l'environnement, naissance par reproduction, mort des individus, début et fin sécheresse** --> terminal de `env.py`
 
-Evolution de l'énergie d'un individu, du fait qu'il se nourrisse, qu'il puisse se reproduire --> terminal de `prey.py` ou `predator.py`
+**Evolution de l'énergie d'un individu, du fait qu'il se nourrisse, qu'il puisse se reproduire** --> terminal de `prey.py` ou `predator.py`
 
 ## 📝 Remarques
 
 - `env.py` doit **toujours** être lancé avant les autres fichiers
 - Il est possible de lancer **plusieurs proies et prédateurs simultanément**
 - La reproduction des proies/prédateurs génère de nouveaux terminaux, trop d'individus fonctionnant simultanément peut entrainer un plantage de la simulation.
-- 
 
 ---
 
