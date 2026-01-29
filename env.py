@@ -86,8 +86,6 @@ def mq_poll_commands(mq: sysv_ipc.MessageQueue):
             print("[env] Erreur dans la MQ:", e, flush=True)
             return
 
-        text = msg.decode(errors="replace").strip()
-
         world_lock.acquire()
         try:
             if t == COMMANDE_PAUSE:
